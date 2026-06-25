@@ -1,69 +1,155 @@
-# 2026 FIFA World Cup match predictor
+# 2026 FIFA World Cup match forecaster
 
-A small, readable model that predicts the outcome of a single 2026 World Cup match — win / draw / loss probabilities, plus a chart you can actually post. You give it two teams, it does the rest.
+Predict **win / draw / loss** probabilities and a **full prop slate** (totals,
+BTTS, halftime, fouls, cards, player shots, and more) for any 2026 World Cup
+match — all derived from one internally consistent scoreline distribution.
 
-I built this as a "first real ML project" you can fork and learn from. The whole thing is one file, no notebooks, no framework soup. If you've ever wanted to build a sports prediction model and didn't know where to start, start here.
+Fork-friendly ML project: readable modules, no notebooks, no framework soup.
+
+```bash
+pip install -r requirements.txt
+python predict.py "Switzerland" "Canada"
+```
 
 ```
-python predict_today.py "Saudi Arabia" "Uruguay"
-```
+================================================================
+  Switzerland vs Canada
+  2026-06-24  ·  Group B  ·  BC Place Vancouver
+================================================================
+  xG (home)            1.44
+  xG (away)            1.26
+----------------------------------------------------------------
+  Switzerland                win    42.7%
+  Draw                              22.5%
+  Canada                     win    34.8%
+----------------------------------------------------------------
+  PICK: Switzerland  (42.7%)   [TOSS-UP]
+================================================================
 
-```
-============================================================
-  Saudi Arabia vs Uruguay
-  2026-06-15  ·  Group H  ·  Miami Stadium
-============================================================
-  Saudi Arabia           win     9.2%
-  Draw                          17.6%
-  Uruguay                win    73.2%
-------------------------------------------------------------
-  PICK: Uruguay  (73.2%)   [LOCK]
-============================================================
+  PROP SLATE
+  --------------------------------------------------------------
+  Will Switzerland win the match?                   42.7%
+  Will there be 3 or more total goals?              75.2%
+  Will both teams score?                            54.7%
+  ...
 ```
 
 ## How it works
 
-There's no magic here — most of the work is in the features, not the model. For any match it builds:
-
-- **Elo ratings.** Computed from scratch over every international result since 2006. Each team starts at 1500 and trades points after every game, with a bigger swing for blowouts and upsets. This one number carries most of the signal.
-- **Recent form.** Win rate and goal difference over each team's last 5 and 10 matches.
-- **Rest days.** How long since each team last played.
-- **Head-to-head.** How these two specific teams have done against each other historically.
-- **Context flags.** Neutral venue, and how meaningful the match was (a World Cup game counts for more than a friendly).
-
-Those features go into an **XGBoost** classifier that outputs three probabilities. I went with gradient-boosted trees because this is tabular data with a few thousand rows — that's exactly where XGBoost beats both linear models (it picks up interactions on its own) and neural nets (which want far more data). It also trains in seconds and tells you which features it leaned on.
-
-The model is trained only on matches *before* the one you're predicting, so it can't peek at the future. On a held-out validation set it lands around **60% accuracy** with a log-loss of **0.86 vs. 1.05** for a no-skill baseline — a real edge, but not a crystal ball (more on that below).
-
-The fixtures, dates, groups and stadiums are read from `data_cache/fixtures.csv`, so you only ever type team names.
-
-## Setup
+Two models, one coherent output (Option 3 hybrid):
 
 ```
+martj42 results (data_cache/results.csv)
+         │
+         ├─→ Elo + form + rest + h2h  →  XGBoost  →  calibrated home/away tilt
+         │
+         └─→ opponent-adjusted Poisson ratings  →  total goal anchor
+                              │
+                fit_lams_from_supremacy()  →  (lam_home, lam_away)
+                              │
+                Dixon-Coles scoreline grid (ρ = 0.13)
+                              │
+                W/D/L + every prop question type
+```
+
+**Why not just XGBoost W/D/L?** A classifier can't price goal props. **Why not
+fit both λs to all three W/D/L numbers?** Draw probability is noisy — that
+corrupts over/under and BTTS. So XGBoost sets the *tilt*, ratings set *total
+goals*, and the grid derives everything else consistently.
+
+Features (all strictly pre-match, no look-ahead):
+
+- **Elo** from every international since 2006 (+60 home bonus where applicable)
+- **Recent form** — win rate and goal diff over last 5 / 10 games
+- **Rest days** and **head-to-head** history
+- **Host-nation fix** — USA, Mexico, and Canada get real home advantage in their
+  host-country stadiums (not treated as neutral)
+
+XGBoost outputs are **isotonic-calibrated** on a held-out validation slice so
+the probabilities are honest, not overconfident softmax scores.
+
+## Quick start
+
+```bash
 pip install -r requirements.txt
-python predict_today.py "Spain" "Cabo Verde"
+
+python predict.py "Spain" "Cabo Verde"
+python predict.py USA Paraguay
+python predict.py Switzerland Canada --questions examples/match.json
+python batch_predict.py
 ```
 
-Team order doesn't matter, and common spellings work (typing `Iran` is fine even though the schedule lists `IR Iran`). Run it with no arguments and it'll ask you for the two teams. The historical results file (~5MB) downloads automatically the first time you run it.
+Team order doesn't matter; common spellings work (`Iran` → `IR Iran`, `USA` →
+`United States`). Charts save to `predictions/<date>/`.
 
-Each run also drops a branded probability chart in `predictions/<date>/`.
+## Refresh before a match
+
+The [martj42/international_results](https://github.com/martj42/international_results)
+dataset updates within a day of every real match. Form, rest days, and h2h are
+computed from that file — no other data sources needed.
+
+**Run with `--refresh` within 24 hours of kickoff** so the model sees the latest
+results:
+
+```bash
+python predict.py --refresh "Switzerland" "Canada"
+# or
+python -c "from forecaster.data import refresh; refresh()"
+```
+
+## Custom question slates
+
+Pass a JSON file with a `questions` list (see `references/question-types.md`):
+
+```json
+{
+  "home": "Switzerland", "away": "Canada",
+  "questions": [
+    {"id": "q1", "type": "match_total_over",
+     "params": {"line": 3, "scope": "match"},
+     "text": "Will there be 4 or more total goals?"},
+    {"id": "q2", "type": "more_fouls",
+     "params": {"side": "away", "fouls_home": 11.0, "fouls_away": 13.0},
+     "text": "Will Canada commit more fouls than Switzerland?"}
+  ]
+}
+```
+
+Count props (fouls, cards, corners, SoT) use base-rate defaults unless you
+override params per question. See `references/base-rates.md`.
+
+## File layout
+
+```
+forecaster/
+  data.py          fetch / load martj42 results
+  features.py      Elo + form + rest + h2h
+  wdl_model.py     XGBoost + isotonic calibration
+  ratings.py       opponent-adjusted Poisson → total goal anchor
+  scoreline.py     Dixon-Coles grid + lambda inversion + all prop types
+  fixtures.py      2026 schedule + host-nation neutral flag
+  chart.py         branded PNG chart
+data_cache/
+  fixtures.csv     2026 WC schedule (static)
+  results.csv      auto-downloaded, gitignored
+references/
+  question-types.md
+  base-rates.md
+predict.py         single-match CLI
+batch_predict.py   all-fixtures batch run
+```
 
 ## What it doesn't do (yet)
 
-Being honest about this matters more than the accuracy number. The model rates *teams*, not the eleven players actually on the pitch, so:
-
-- No injuries or suspensions.
-- No expected goals (xG) — which is the stat that actually moves modern soccer models.
-- No lineups, no manager/tactics, no "this team only needs a draw to advance" context.
-
-It also under-calls draws, like most win/draw/loss models do, because draws don't have a clean statistical fingerprint. Soccer is low-scoring and high-variance, so even a good model gets plenty wrong — judge it over a season of games with log-loss, not on any single result.
-
-Next on my list: pulling in xG and injury/lineup data, and trying a goals-based (Poisson) approach that handles draws more naturally.
+- No injuries, lineups, or player-level xG beyond what you pass in question params
+- Player-to-score props need `player_xg` inputs — treat as low-confidence without them
+- Knockout placeholders in `fixtures.csv` are skipped until real teams are known
 
 ## Data
 
-Historical results come from the open [martj42/international_results](https://github.com/martj42/international_results) dataset. Fixtures are the official 2026 schedule.
+- **Results:** [martj42/international_results](https://github.com/martj42/international_results)
+- **Fixtures:** official 2026 schedule in `data_cache/fixtures.csv`
 
 ## License
 
-MIT — do whatever you want with it. If you build something cool on top, I'd love to see it and make sure you tag me @mar_antaya on Tiktok, Youtube and Instagram or Mariana Antaya on Linkedin!
+MIT — do whatever you want with it.

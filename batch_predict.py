@@ -1,111 +1,114 @@
 #!/usr/bin/env python3
 """
-batch_predict.py — predict every group-stage match in one run.
+batch_predict.py — forecast every group-stage (and known knockout) match.
 
-Loops over the fixtures, skips knockout rows whose teams are still
-placeholders (e.g. "Winner match 91"), and predicts each match where both
-real teams are known. Prints a table and writes a CSV.
-
-Fidelity: this mirrors predict_today.py exactly — the model is retrained
-with a cutoff at each match's date so it never peeks at the future. Models
-are cached per date, so we train once per match-day, not once per match.
-
-    python batch_predict.py                 # table + CSV (default)
-    python batch_predict.py --csv out.csv   # custom CSV path
-    python batch_predict.py --no-csv        # table only
+Usage
+-----
+  python batch_predict.py
+  python batch_predict.py --csv out.csv
+  python batch_predict.py --refresh
 """
+
 import argparse
 import os
-import sys
 
 import pandas as pd
 
-import predict_today as pt
-
-
-def trained_model_for(dataset, cutoff, _cache={}):
-    """Train (or reuse) a model with validation data cut off at `cutoff`."""
-    if cutoff not in _cache:
-        train, val = pt.split_by_date(dataset, pt.TRAIN_START, pt.VAL_START, cutoff)
-        model, _, _ = pt.train_model(train, val)
-        _cache[cutoff] = model
-    return _cache[cutoff]
-
-
-def group_stage_fixtures(valid_teams):
-    """Yield fixture dicts for matches where both teams are real (not placeholders)."""
-    fx = pd.read_csv(pt.FIXTURES_PATH)
-    for _, row in fx.iterrows():
-        teams = str(row["teams"])
-        if " v " not in teams:
-            continue
-        left, right = [p.strip() for p in teams.split(" v ")]
-        home, away = pt.map_fixture_name(left), pt.map_fixture_name(right)
-        if home not in valid_teams or away not in valid_teams:
-            continue  # knockout placeholder — can't predict yet
-        yield {
-            "match": row.get("match_number", ""),
-            "group": row.get("group", ""),
-            "stadium": row.get("stadium", ""),
-            "date": row.get("date_dt", ""),
-            "home_disp": left, "away_disp": right,
-            "home": home, "away": away,
-        }
+from forecaster.data      import load_results, refresh
+from forecaster.features  import build_dataset
+from forecaster.ratings   import fit as fit_ratings, lambdas as rating_lambdas
+from forecaster.scoreline import fit_lams_from_supremacy, symmetric_result_probs, DC_RHO
+from forecaster.fixtures  import load_fixtures
+from forecaster.names     import normalize
+from predict              import _get_model, _symmetric_calibrated_probs, _tag
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Predict every group-stage match at once.")
-    ap.add_argument("--csv", default="predictions/all_group_predictions.csv",
-                    help="where to write the CSV (default: predictions/all_group_predictions.csv)")
-    ap.add_argument("--no-csv", action="store_true", help="print the table but don't write a CSV")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", default="predictions/all_predictions.csv")
+    ap.add_argument("--no-csv",   action="store_true")
+    ap.add_argument("--refresh",  action="store_true")
     args = ap.parse_args()
 
-    print("\nLoading data + building features ...")
-    results = pt.load_results()
-    dataset, final_elo = pt.build_dataset(results)
-    valid_teams = set(results["home_team"]) | set(results["away_team"])
-    long = pt.per_team_long(results)
+    if args.refresh:
+        refresh()
 
-    fixtures = sorted(group_stage_fixtures(valid_teams), key=lambda m: (str(m["date"]), str(m["match"])))
+    print("\nLoading data + building features ...")
+    results        = load_results()
+    dataset, final_elo = build_dataset(results)
+    valid_teams    = {normalize(r["home_team"]) for r in results} | \
+                     {normalize(r["away_team"]) for r in results}
+
+    ratings_model = fit_ratings(results, ref_date="2026-08-01")
+
+    fixtures = [
+        fx for fx in load_fixtures()
+        if fx["home"] in valid_teams and fx["away"] in valid_teams
+    ]
+    fixtures.sort(key=lambda m: (str(m["date"]), str(m["match_number"])))
+
     if not fixtures:
-        print("  No predictable group-stage fixtures found.")
+        print("No predictable fixtures found.")
         return
 
-    print(f"Predicting {len(fixtures)} matches "
-          f"(training one model per match-day) ...\n")
+    print(f"Predicting {len(fixtures)} matches ...\n")
 
     rows = []
-    for m in fixtures:
-        model = trained_model_for(dataset, m["date"])
-        p_home, p_draw, p_away = pt.predict_symmetric(
-            model, long, final_elo, m["home"], m["away"], m["date"],
-            pt.MATCH_NEUTRAL, pt.MATCH_WEIGHT)
-        outcomes = [(m["home_disp"], p_home), ("Draw", p_draw), (m["away_disp"], p_away)]
+    for fx in fixtures:
+        home, away     = fx["home"], fx["away"]
+        match_date     = fx["date"]
+        neutral        = fx["neutral"]
+
+        model, calibrators = _get_model(dataset, match_date)
+        p_h, p_d, p_a = _symmetric_calibrated_probs(
+            model, calibrators, results, final_elo,
+            home, away, match_date, neutral, 4)
+
+        lh_base, la_base = rating_lambdas(ratings_model, home, away, neutral=neutral)
+        lam_home, lam_away = fit_lams_from_supremacy(
+            p_h, p_a, lh_base + la_base, rho=DC_RHO)
+
+        p_home, p_draw, p_away = symmetric_result_probs(lam_home, lam_away)
+
+        outcomes = [(fx["home_disp"], p_home),
+                    ("Draw", p_draw),
+                    (fx["away_disp"], p_away)]
         pick, conf = max(outcomes, key=lambda x: x[1])
-        he, ae = final_elo.get(m["home"], pt.ELO_BASE), final_elo.get(m["away"], pt.ELO_BASE)
-        tag = pt.tag_match(conf, p_home, p_away, he, ae)
+        he = final_elo.get(home, 1500.0)
+        ae = final_elo.get(away, 1500.0)
+        tag = _tag(conf, p_home, p_away, he, ae)
+
         rows.append({
-            "match": m["match"], "date": m["date"], "group": m["group"],
-            "home": m["home_disp"], "away": m["away_disp"],
-            "p_home": round(p_home, 4), "p_draw": round(p_draw, 4), "p_away": round(p_away, 4),
-            "pick": pick, "confidence": round(conf, 4), "tag": tag,
+            "match":      fx["match_number"],
+            "date":       match_date,
+            "group":      fx["group"],
+            "home":       fx["home_disp"],
+            "away":       fx["away_disp"],
+            "neutral":    fx["neutral"],
+            "lam_home":   round(lam_home, 3),
+            "lam_away":   round(lam_away, 3),
+            "p_home":     round(p_home, 4),
+            "p_draw":     round(p_draw, 4),
+            "p_away":     round(p_away, 4),
+            "pick":       pick,
+            "confidence": round(conf, 4),
+            "tag":        tag,
         })
 
-    # ── table ──────────────────────────────────────────────────────────────
-    print("=" * 96)
-    print(f"  {'#':<4}{'Date':<12}{'Group':<9}{'Match':<34}"
-          f"{'Home':>6}{'Draw':>7}{'Away':>7}  Pick")
-    print("=" * 96)
+    W = 100
+    print("=" * W)
+    print(f"  {'#':<5}{'Date':<12}{'Grp':<7}{'Match':<34}"
+          f"{'Home':>7}{'Draw':>7}{'Away':>7}  Pick")
+    print("=" * W)
     for r in rows:
-        match_str = f"{r['home']} v {r['away']}"
-        num = str(r["match"]).replace("Match ", "")
-        print(f"  {num:<4}{r['date']:<12}{str(r['group']):<9}{match_str[:33]:<34}"
-              f"{r['p_home']*100:>5.1f}%{r['p_draw']*100:>6.1f}%{r['p_away']*100:>6.1f}%"
+        mstr = f"{r['home']} v {r['away']}"
+        num  = str(r["match"]).replace("Match ", "")
+        print(f"  {num:<5}{r['date']:<12}{str(r['group']):<7}{mstr[:33]:<34}"
+              f"{r['p_home']*100:>6.1f}%{r['p_draw']*100:>6.1f}%{r['p_away']*100:>6.1f}%"
               f"  {r['pick']} ({r['confidence']*100:.0f}% {r['tag']})")
-    print("=" * 96)
-    print(f"  {len(rows)} matches predicted.")
+    print("=" * W)
+    print(f"  {len(rows)} matches predicted.\n")
 
-    # ── CSV ────────────────────────────────────────────────────────────────
     if not args.no_csv:
         os.makedirs(os.path.dirname(args.csv) or ".", exist_ok=True)
         pd.DataFrame(rows).to_csv(args.csv, index=False)
