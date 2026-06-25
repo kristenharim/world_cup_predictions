@@ -1,0 +1,14 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# generated predictions + charts
+predictions/
+
+# auto-downloaded on first run (large, ~5MB)
+data_cache/results.csv
+
+# os junk
+.DS_Store
