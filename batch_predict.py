@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-batch_predict.py — forecast every group-stage (and known knockout) match.
+batch_predict.py: forecast every group-stage (and known knockout) match.
 
 Usage
 -----

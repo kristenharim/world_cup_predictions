@@ -1,5 +1,5 @@
 """
-scoreline.py — Poisson scoreline engine with Dixon-Coles correction.
+scoreline.py: Poisson scoreline engine with Dixon-Coles correction.
 
 This is the heart of the prop-pricing system. One (lam_home, lam_away) pair →
 one scoreline distribution → every question type, mutually coherent.
@@ -108,7 +108,7 @@ def fit_lams_from_supremacy(p_home: float, p_away: float,
 
     This keeps the result tilt faithful to the learned features while anchoring
     total goals to the ratings model. The draw probability emerges from the grid
-    rather than being forced (which is better — XGBoost under-calls draws).
+    rather than being forced (which is better, since XGBoost under-calls draws).
 
     Parameters
     ----------

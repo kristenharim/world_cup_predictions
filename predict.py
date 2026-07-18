@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-predict.py — 2026 FIFA World Cup match forecaster
+predict.py: 2026 FIFA World Cup match forecaster
 ==================================================
 
 Produces W/D/L probabilities and a full Jump Cup prop slate from one coherent

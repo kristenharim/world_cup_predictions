@@ -1,5 +1,5 @@
 """
-chart.py — branded win-probability chart (horizontal layout).
+chart.py: branded win-probability chart (horizontal layout).
 
 Saves a PNG to predictions/<date>/viz_<Home>_vs_<Away>.png.
 """

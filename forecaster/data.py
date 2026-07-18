@@ -1,5 +1,5 @@
 """
-data.py — single source of truth for historical match results.
+data.py: single source of truth for historical match results.
 
 Downloads the martj42/international_results dataset on first run and caches it
 locally. Call refresh() any time you want to pull the latest results (the repo

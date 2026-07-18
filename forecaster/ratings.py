@@ -1,5 +1,5 @@
 """
-ratings.py — recency-weighted, opponent-adjusted Poisson attack/defense ratings.
+ratings.py: recency-weighted, opponent-adjusted Poisson attack/defense ratings.
 
 Fits attack (att) and defense (dfn) ratings for every team by iteratively
 solving for consistent goal expectations. Shrinks toward the league mean using

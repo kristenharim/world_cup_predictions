@@ -1,5 +1,5 @@
 """
-features.py — Elo ratings, recent form, rest days, head-to-head.
+features.py: Elo ratings, recent form, rest days, head-to-head.
 
 All features are computed strictly from data BEFORE the match being predicted
 (no look-ahead). The main entry point is build_dataset(), which returns a
@@ -146,8 +146,8 @@ def build_dataset(results: list) -> tuple:
     Returns
     -------
     (dataset: pd.DataFrame, final_elo: dict)
-      dataset   — one row per historical match, with all features + label
-      final_elo — {team: rating} at end of training window (for inference)
+      dataset   : one row per historical match, with all features + label
+      final_elo : {team: rating} at end of training window (for inference)
     """
     df = pd.DataFrame(results)
     df["date"]        = pd.to_datetime(df["date"])

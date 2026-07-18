@@ -1,4 +1,4 @@
-# Question types — the model's vocabulary
+# Question types: the model's vocabulary
 
 Every question on a slate maps to one `type` understood by `model.py`. Each
 takes `params`. Goal-based types derive from the match's `lam_home` / `lam_away`
@@ -6,7 +6,7 @@ takes `params`. Goal-based types derive from the match's `lam_home` / `lam_away`
 `model.DEFAULTS` (override per question in `params`).
 
 `scope` is one of `match` (default), `1h`, `2h`. The split is `share_2h` (default
-0.55 — second halves carry more goals).
+0.55, second halves carry more goals).
 
 | type | params | resolves YES when | notes |
 |---|---|---|---|
@@ -38,12 +38,12 @@ takes `params`. Goal-based types derive from the match's `lam_home` / `lam_away`
 
 ## Contrarian tags (drive the `contrarian` pod only)
 Add to a question's `tags` list:
-- `favorite` — crowd overrates this favorite; pod regresses the crowd toward 50%.
-- `star_player` — name-recognition prop; pod fades the crowd down.
-- `base_rate:<p>` — pod regresses the crowd toward `<p>` (e.g. `base_rate:0.36`
+- `favorite`: crowd overrates this favorite; pod regresses the crowd toward 50%.
+- `star_player`: name-recognition prop; pod fades the crowd down.
+- `base_rate:<p>`: pod regresses the crowd toward `<p>` (e.g. `base_rate:0.36`
   for penalty-or-red). Use for questions with a strong historical anchor.
 
 ## Worked mapping
 The 10-question Canada vs Bosnia slate is fully encoded in
-`match-template.json` — copy it as your starting point and swap in the new
+`match-template.json`. Copy it as your starting point and swap in the new
 match's numbers.

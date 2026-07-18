@@ -1,5 +1,5 @@
 """
-names.py — canonical team name normalization.
+names.py: canonical team name normalization.
 
 The martj42 dataset, fixtures.csv, and user input all use slightly different
 spellings. Everything funnels through normalize() before being stored or looked up.

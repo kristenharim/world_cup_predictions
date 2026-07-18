@@ -1,4 +1,4 @@
-# Base rates — priors for peripheral markets
+# Base rates: priors for peripheral markets
 
 When you don't have a specific number, these are the defaults baked into
 `model.DEFAULTS`. They're per-team-per-match unless noted. Override per question
@@ -23,9 +23,9 @@ in `params` whenever you have a sharper read (style, lineup, ref tendencies).
 - **Star striker** vs a weak back line: raise his `player_xg` (share of a higher
   team xG) and `player_xsot`.
 - **Game state**: a favorite expected to lead will see the underdog chase in the
-  2nd half — nudges 2nd-half goals and shots up for the trailing side.
+  2nd half, which nudges 2nd-half goals and shots up for the trailing side.
 
 These priors are deliberately conservative. As the ledger grows, revisit them
 against realized outcomes (the calibration table in `cup.py report` will show
-systematic misses — e.g. if your 2nd-half-goal questions are always under, raise
+systematic misses, e.g. if your 2nd-half-goal questions are always under, raise
 `share_2h`).

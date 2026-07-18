@@ -1,5 +1,5 @@
 """
-wdl_model.py — calibrated XGBoost win/draw/loss classifier.
+wdl_model.py: calibrated XGBoost win/draw/loss classifier.
 
 Trains on historical match features (Elo, form, h2h) to predict W/D/L
 probabilities. Wraps the raw XGBoost output with isotonic calibration fit on a

@@ -2,7 +2,7 @@
 
 Predict **win / draw / loss** probabilities and a **full prop slate** (totals,
 BTTS, halftime, fouls, cards, player shots, and more) for any 2026 World Cup
-match — all derived from one internally consistent scoreline distribution.
+match, all derived from one internally consistent scoreline distribution.
 
 Fork-friendly ML project: readable modules, no notebooks, no framework soup.
 
@@ -53,16 +53,16 @@ martj42 results (data_cache/results.csv)
 ```
 
 **Why not just XGBoost W/D/L?** A classifier can't price goal props. **Why not
-fit both λs to all three W/D/L numbers?** Draw probability is noisy — that
+fit both λs to all three W/D/L numbers?** Draw probability is noisy, and that
 corrupts over/under and BTTS. So XGBoost sets the *tilt*, ratings set *total
 goals*, and the grid derives everything else consistently.
 
 Features (all strictly pre-match, no look-ahead):
 
 - **Elo** from every international since 2006 (+60 home bonus where applicable)
-- **Recent form** — win rate and goal diff over last 5 / 10 games
+- **Recent form:** win rate and goal diff over last 5 / 10 games
 - **Rest days** and **head-to-head** history
-- **Host-nation fix** — USA, Mexico, and Canada get real home advantage in their
+- **Host-nation fix:** USA, Mexico, and Canada get real home advantage in their
   host-country stadiums (not treated as neutral)
 
 XGBoost outputs are **isotonic-calibrated** on a held-out validation slice so
@@ -86,7 +86,7 @@ Team order doesn't matter; common spellings work (`Iran` → `IR Iran`, `USA` �
 
 The [martj42/international_results](https://github.com/martj42/international_results)
 dataset updates within a day of every real match. Form, rest days, and h2h are
-computed from that file — no other data sources needed.
+computed from that file, no other data sources needed.
 
 **Run with `--refresh` within 24 hours of kickoff** so the model sees the latest
 results:
@@ -142,7 +142,7 @@ batch_predict.py   all-fixtures batch run
 ## What it doesn't do (yet)
 
 - No injuries, lineups, or player-level xG beyond what you pass in question params
-- Player-to-score props need `player_xg` inputs — treat as low-confidence without them
+- Player-to-score props need `player_xg` inputs; treat as low-confidence without them
 - Knockout placeholders in `fixtures.csv` are skipped until real teams are known
 
 ## Data
@@ -152,4 +152,4 @@ batch_predict.py   all-fixtures batch run
 
 ## License
 
-MIT — do whatever you want with it.
+MIT. Do whatever you want with it.

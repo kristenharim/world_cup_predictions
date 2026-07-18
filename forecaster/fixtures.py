@@ -1,8 +1,8 @@
 """
-fixtures.py — load and look up 2026 World Cup fixtures.
+fixtures.py: load and look up 2026 World Cup fixtures.
 
 Fixes the host-nation neutral bug from world_cup_predictions:
-Mexico plays in Mexico City, USA in the US, Canada in Canada — those are NOT
+Mexico plays in Mexico City, USA in the US, Canada in Canada. Those are NOT
 neutral venues for those teams and the +60 Elo advantage / GAMMA factors
 should apply. The neutral flag is per-fixture, not a global constant.
 """
